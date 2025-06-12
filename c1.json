@@ -1,0 +1,45 @@
+{
+    "features": [
+        "flowStartSeconds",
+
+        "destinationIPAddress",
+
+        {"distinct":["sourceIPAddress"]},
+        {"mode":["sourceIPAddress"]},
+        {"modeCount":["sourceIPAddress"]},
+
+        {"distinct":["sourceTransportPort"]},
+        {"mode":["sourceTransportPort"]},
+        {"modeCount":["sourceTransportPort"]},
+
+        {"distinct":["destinationTransportPort"]},
+        {"mode":["destinationTransportPort"]},
+        {"modeCount":["destinationTransportPort"]},
+
+        {"distinct":["protocolIdentifier"]},
+        {"mode":["protocolIdentifier"]},
+        {"modeCount":["protocolIdentifier"]},
+
+        {"distinct":["ipTTL"]},
+        {"mode":["ipTTL"]},
+        {"modeCount":["ipTTL"]},
+
+        {"distinct":["_tcpFlags"]},
+        {"mode":["_tcpFlags"]},
+        {"modeCount":["_tcpFlags"]},
+
+        {"distinct":["octetTotalCount"]},
+        {"mode":["octetTotalCount"]},
+        {"modeCount":["octetTotalCount"]},
+
+        "packetTotalCount"
+
+        ],
+    "bidirectional": true,
+    "active_timeout": 1000,
+    "idle_timeout": 1000,
+    "key_features": [
+        "destinationIPAddress",
+        "__timeWindow10s"
+    ]
+}
