@@ -5,6 +5,8 @@
 FILES_TO_PACKAGE=(
     "run.sh"
     "classify.py"
+    "preprocess_features.py"
+    "create_aggregated_features.py"
     "detailed_bidi.json"
     "go-flows"
     "flow_classifier.pkl"
