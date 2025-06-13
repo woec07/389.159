@@ -10,7 +10,7 @@ FILES_TO_PACKAGE=(
     "detailed_bidi.json"
     "go-flows"
     "flow_classifier.pkl"
-    "label_encoder.pkl"
+    "label_mapping.pkl"
 )
 # The name of the final zip file
 ZIP_NAME="v3.zip"

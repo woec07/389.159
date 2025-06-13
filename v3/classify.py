@@ -26,7 +26,7 @@ def main():
     print(f"Loaded {len(df)} flows")
 
     pipeline = joblib.load('flow_classifier.pkl')
-    label_encoder = joblib.load('label_encoder.pkl')
+    reverse_label_map = joblib.load('label_mapping.pkl')
 
     df = create_aggregated_features.agg_features(df)
 
@@ -34,9 +34,9 @@ def main():
     X = preprocess_features.preproc(df, False)
 
     print("Making predictions...")
-    y_pred = pipeline.predict(X)
+    y_pred_encoded = pipeline.predict(X)
 
-    predictions = label_encoder.inverse_transform(y_pred)
+    predictions = pd.Series([reverse_label_map.get(p, 'Unknown') for p in y_pred_encoded])
 
     output_df = df[[
         'flowStartMilliseconds',

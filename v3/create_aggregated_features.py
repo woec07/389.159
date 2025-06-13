@@ -7,17 +7,20 @@ Created on Fri Jun 13 16:39:14 2025
 """
 import socket
 import struct
+
+import numpy as np
 import pandas as pd
 
 
-def ip_to_int(ip_str):
+def ip_to_int(ip_str: str) -> int:
     """Convert IP address string to integer"""
     try:
         return struct.unpack("!I", socket.inet_aton(str(ip_str)))[0]
     except:
         return 0
 
-def c1_detection(df):
+
+def c1_detection(df: pd.DataFrame) -> pd.DataFrame:
     # C1 Detection: DDoS (many sources -> one destination)
     dst_stats = df.groupby('dst_ip_int').agg({
         'src_ip_int': 'nunique',
@@ -28,10 +31,11 @@ def c1_detection(df):
         'packetTotalCount': 'total_packets_to_dst',
         'octetTotalCount': 'total_bytes_to_dst'
     })
-        
+
     return dst_stats
 
-def c2_detection(df):
+
+def c2_detection(df: pd.DataFrame) -> pd.DataFrame:
     # C2 Detection: Horizontal scanning (one source -> many destinations)
     src_stats = df.groupby('src_ip_int').agg({
         'dst_ip_int': 'nunique',
@@ -44,80 +48,70 @@ def c2_detection(df):
         'packetTotalCount': 'total_packets_from_src',
         'octetTotalCount': 'total_bytes_from_src'
     })
-    
+
     return src_stats
 
 
-def c3_detection(df):
-
-    df['is_banner_grab'] = (
-        (df['flowDurationMilliseconds'] < 100)      # very brief
-        & (df['packetTotalCount'] == 1)             # exactly one packet
-        & (df['octetTotalCount']  < 50)            # tiny payload
-    )
+def c3_detection(df: pd.DataFrame) -> pd.DataFrame:
     # C3 Detection: Vertical scanning (one source -> one destination, many different ports)
-    c3_stats = df[df['is_banner_grab']].groupby(['src_ip_int','dst_ip_int']).agg({
+    c3_stats = df.groupby(['src_ip_int', 'dst_ip_int']).agg({
         'destinationTransportPort': 'nunique',
-        'packetTotalCount': 'sum',
-        'octetTotalCount': 'sum',
         'flowStartMilliseconds': 'count',
     }).rename(columns={
-        'destinationTransportPort': 'c3_ports_per_scan',
-        'packetTotalCount': 'c3_total_packets_per_scan',
-        'octetTotalCount': 'c3_total_bytes_per_scan',
-        'flowStartMilliseconds': 'c3_flows_per_scan',
+        'destinationTransportPort': 'c3_dst_port_diversity',
+        'flowStartMilliseconds': 'c3_flow_count',
     })
-        
-    c3_stats['c3_ports_per_flow'] = (
-        c3_stats['c3_ports_per_scan'] 
-        / c3_stats['c3_flows_per_scan'].replace(0, 1)
-    )
+
+    # high value => many ports were tried in few flows (classic scan)
+    c3_stats['c3_scan_intensity'] = c3_stats['c3_dst_port_diversity'] / c3_stats['c3_flow_count']
+
     return c3_stats
 
-def c4_detection(df):
+
+def c4_detection(df: pd.DataFrame) -> pd.DataFrame:
     # C4 Detection:
     vuln_ports = {
-    21, 22, 23, 25, 53, 67, 68, 69,
-    80, 110, 123, 137, 138, 139, 143,
-    161, 162, 389, 443, 445, 512, 513,
-    514, 2049, 3306, 3389, 5432, 5900,
-    5901, 5902, 6379, 27017, 9200,
-    1433, 1434, 1521, 2375, 6443
+        21, 22, 23, 25, 53, 67, 68, 69,
+        80, 110, 123, 137, 138, 139, 143,
+        161, 162, 389, 443, 445, 512, 513,
+        514, 2049, 3306, 3389, 5432, 5900,
+        5901, 5902, 6379, 27017, 9200,
+        1433, 1434, 1521, 2375, 6443
     }
-    
+
     df['is_c4_candidate'] = df['destinationTransportPort'].isin(vuln_ports)
-    df['is_long_flow']    = df['flowDurationMilliseconds'] > 10_000  # >10 s
-    df['is_big_payload']  = df['octetTotalCount'] > df['octetTotalCount'].quantile(0.75)
+    df['is_long_flow'] = df['flowDurationMilliseconds'] > 10_000  # >10 s
+    df['is_big_payload'] = df['octetTotalCount'] > df['octetTotalCount'].quantile(0.75)
 
     # Per-source C4 patterns
     c4_src = df[df['is_c4_candidate']].groupby('src_ip_int').agg({
         'is_c4_candidate': 'count',
-        'is_long_flow':    'sum',
-        'is_big_payload':  'sum',
+        'is_long_flow': 'sum',
+        'is_big_payload': 'sum',
     }).rename(columns={
         'is_c4_candidate': 'c4_flows_from_src',
-        'is_long_flow':    'c4_long_flows_from_src',
-        'is_big_payload':  'c4_big_payload_flows_from_src',
+        'is_long_flow': 'c4_long_flows_from_src',
+        'is_big_payload': 'c4_big_payload_flows_from_src',
     })
-    c4_src['c4_long_ratio_src']       = c4_src['c4_long_flows_from_src'] / (c4_src['c4_flows_from_src'] + 1)
-    c4_src['c4_big_payload_ratio_src']= c4_src['c4_big_payload_flows_from_src'] / (c4_src['c4_flows_from_src'] + 1)
+    c4_src['c4_long_ratio_src'] = c4_src['c4_long_flows_from_src'] / (c4_src['c4_flows_from_src'] + 1)
+    c4_src['c4_big_payload_ratio_src'] = c4_src['c4_big_payload_flows_from_src'] / (c4_src['c4_flows_from_src'] + 1)
 
     return c4_src
-    
 
-def agg_features(df):
-    """Create aggregated features using efficient pandas operations"""
-    
-    print("Computing aggregated features (fast version)...")
+
+def agg_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Create aggregated features"""
+
+    print("Computing aggregated features...")
     df = df.copy()
 
     # Convert IP addresses to integers for processing
     df['src_ip_int'] = df['sourceIPAddress'].apply(ip_to_int)
     df['dst_ip_int'] = df['destinationIPAddress'].apply(ip_to_int)
-    
+
     c1_features = c1_detection(df)
     c2_features = c2_detection(df)
-    #c3_features = c3_detection(df)
+    c3_features = c3_detection(df)
     c4_features = c4_detection(df)
 
     # Merge back to original dataframe
@@ -131,22 +125,18 @@ def agg_features(df):
     df['total_bytes_from_src'] = df['total_bytes_from_src'].fillna(df['octetTotalCount'])
     df['total_packets_to_dst'] = df['total_packets_to_dst'].fillna(df['packetTotalCount'])
     df['total_bytes_to_dst'] = df['total_bytes_to_dst'].fillna(df['octetTotalCount'])
-    #df = df.merge(c3_features, left_on=['src_ip_int','dst_ip_int'], right_index=True, how='left'
-    #).fillna({
-    #    'c3_ports_per_scan': 0,
-    #    'c3_total_packets_per_scan': 0,
-    #    'c3_total_bytes_per_scan': 0,
-    #    'c3_flows_per_scan': 0,
-    #    'c3_ports_per_flow': 0,   
-    #})
+    df['src_scan_reputation'] = df['unique_dst_per_src'] * df['dst_port_diversity']
+    df = df.merge(c3_features, left_on=['src_ip_int', 'dst_ip_int'], right_index=True, how='left').fillna({
+        'c3_dst_port_diversity': 0,
+        'c3_flow_count': 0,
+        'c3_scan_intensity': 0,
+    })
     df = df.merge(c4_features, left_on='src_ip_int', right_index=True, how='left').fillna({
         'c4_flows_from_src': 0,
-        'c4_long_flows_from_src':0,
-        'c4_big_payload_flows_from_src':0,
-        'c4_long_ratio_src':0,
-        'c4_big_payload_ratio_src':0,
+        'c4_long_flows_from_src': 0,
+        'c4_big_payload_flows_from_src': 0,
+        'c4_long_ratio_src': 0,
+        'c4_big_payload_ratio_src': 0,
     })
-    
 
     return df
-
